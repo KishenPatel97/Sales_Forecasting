@@ -82,33 +82,34 @@ app.layout = html.Div([
 
     html.H1("Sales Forecasting", style={'text-align': 'center'}),
 
-    dcc.Input(
-        id="input_shop_id", type="number", placeholder="input shop id"
-    ),
-    html.Div(id='output_input_shop_id'),
+    html.Div(['Shop ID: ',
+              dcc.Input(id="input_shop_id", value='initial value', type="number", placeholder="Shop ID")]),
+    html.Br(),
+    html.Div(id='shop_id_output'),
     html.Br(),
 
-    dcc.Input(
-        id="input_item_id", type="number", placeholder="input item id"
-    ),
-    html.Div(id='output_input_item_id'),
+    html.Div(['Item ID: ',
+              dcc.Input(id="input_item_id", value='initial value', type="number", placeholder="Item ID")]),
+    html.Br(),
+    html.Div(id='item_id_output'),
     html.Br(),
 
     #dcc.Graph(id='shop_item_sales_graph', figure={})
-
 ])
+
 # ------------------------------------------------------------------------------
 # Connect the Plotly graphs with Dash Components
 @app.callback(
-    [Output(component_id='output_input_shop_id', component_property='children'),
-    Output(component_id='output_input_item_id', component_property='children')],
-    [Input("input_shop_id", "value"),
-    Input("input_item_id", "value")]
+    [Output(component_id='shop_id_output', component_property='children')],
+    [Output(component_id='item_id_output', component_property='children')],
+    [Input("input_shop_id", "value")],
+    [Input("input_item_id", "value")],
 
 )
-def update_graph(*vals):
-
-    return " | ".join( (str(val) for val in vals if val))
+def update_outputs(input_shop_id, input_item_id):
+    return ['Output Shop ID: {}'.format(input_shop_id),
+            'Output Item ID: {}'.format(input_item_id)]
+    #return " | ".join( (str(val) for val in vals if val))
 
 
 
