@@ -27,7 +27,7 @@ import pickle
 import dash  # (version 1.12.0) pip install dash
 import dash_core_components as dcc
 import dash_html_components as html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 
 
 def plot_features(booster, figsize):
@@ -74,7 +74,17 @@ def downcast_dtypes(df):
 #            train.item_price > 0)].item_price.median()
 
 
-app = dash.Dash(__name__)
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+styles = {
+    'pre': {
+        'border': 'thin lightgrey solid',
+        'overflowX': 'scroll'
+    }
+}
+
+#sample_df = train[]
+#item_by_shop_fig = px.line()
 
 # ------------------------------------------------------------------------------
 # App layout
@@ -83,16 +93,21 @@ app.layout = html.Div([
     html.H1("Sales Forecasting", style={'text-align': 'center'}),
 
     html.Div(['Shop ID: ',
-              dcc.Input(id="input_shop_id", value='initial value', type="number", placeholder="Shop ID")]),
-    html.Br(),
-    html.Div(id='shop_id_output'),
-    html.Br(),
+              dcc.Input(id="input_shop_id", value='', type="number", placeholder="Shop ID")]),
 
     html.Div(['Item ID: ',
-              dcc.Input(id="input_item_id", value='initial value', type="number", placeholder="Item ID")]),
+              dcc.Input(id="input_item_id", value='', type="number", placeholder="Item ID")]),
+
+    html.Div(html.Button(id='submit-button-state', n_clicks=0, children='Get Historical Sales Data')),
+
     html.Br(),
-    html.Div(id='item_id_output'),
+    html.Div(id='item_id_and_shop_id_output'),
     html.Br(),
+
+
+
+    #html.Div(['Sales',
+    #          dcc.Graph(figure=item_by_shop_fig)
 
     #dcc.Graph(id='shop_item_sales_graph', figure={})
 ])
@@ -100,16 +115,18 @@ app.layout = html.Div([
 # ------------------------------------------------------------------------------
 # Connect the Plotly graphs with Dash Components
 @app.callback(
-    [Output(component_id='shop_id_output', component_property='children')],
-    [Output(component_id='item_id_output', component_property='children')],
-    [Input("input_shop_id", "value")],
-    [Input("input_item_id", "value")],
-
+    Output(component_id='item_id_and_shop_id_output', component_property='children'),
+    [Input('submit-button-state', 'n_clicks')],
+     [State("input_shop_id", "value"),
+     State("input_item_id", "value")]
 )
-def update_outputs(input_shop_id, input_item_id):
-    return ['Output Shop ID: {}'.format(input_shop_id),
-            'Output Item ID: {}'.format(input_item_id)]
-    #return " | ".join( (str(val) for val in vals if val))
+
+def update_output(n_clicks, input_shop_id, input_item_id):
+    return '''
+        The Button has been pressed {} times\n
+        Shop ID is "{}"\n
+        Item ID is "{}"\n      
+        '''.format(n_clicks, input_shop_id, input_item_id)
 
 
 
