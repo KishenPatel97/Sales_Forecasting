@@ -94,24 +94,29 @@ regressor = LinearRegression()
 regressor.fit(X_train, Y_train)
 
 #%%
+Y_pred = regressor.predict(X_test)
+
+#%%
+score = regressor.score(X_test, Y_test)
+#%%
 #z = ['month 0', 'shop 0', 'item_category 2', 'item 5572', 1322]
 
 
 from scipy import stats
-def auto_predictor():
-    global ct
-    month = input('Please enter the month you want to predict. Enter the digit of the month, eg. Jan = 0 : ')
-    shop = input('Please enter the shop ID, eg. 2 : ')
-    item = input("Please enter the item ID you wish to predict, eg. for item 55, enter '55' : ")
-    item_cat = (items.loc[items['item_id'] == int(item), ['item_category_id']].values)[0][0]
-    prices = train.loc[train['item_id'] == int(item), ['item_price']].values
-    price = (stats.mode(prices))[0][0][0]
+# def auto_predictor():
+#     global ct
+month = input('Please enter the month you want to predict. Enter the digit of the month, eg. Jan = 0 : ')
+shop = input('Please enter the shop ID, eg. 2 : ')
+item = input("Please enter the item ID you wish to predict, eg. for item 55, enter '55' : ")
+item_cat = (items.loc[items['item_id'] == int(item), ['item_category_id']].values)[0][0]
+prices = train.loc[train['item_id'] == int(item), ['item_price']].values
+price = (stats.mode(prices))[0][0][0]
+
+z = ['month ' + str(month), 'shop ' + str(shop), 'item_category ' + str(item_cat), 'item ' + str(item), price]
+z = np.array(z, dtype = object).reshape(1, -1)
+z = ct.transform(z)
+z_pred = regressor.predict(z)
     
-    z = ['month ' + str(month), 'shop ' + str(shop), 'item_category ' + str(item_cat), 'item ' + str(item), price]
-    z = np.array(z, dtype = object).reshape(1, -1)
-    z = ct.transform(z)
-    z_pred = regressor.predict(z)
-    
-    return(z_pred[0])
+    # return(z_pred[0])
     
 
