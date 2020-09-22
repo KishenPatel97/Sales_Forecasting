@@ -155,8 +155,8 @@ class PredictionModel:
 sample_model = PredictionModel()
 
 sample_model.train
-sample_model.one_hot_encode()
-sample_model.run_model()
+#sample_model.one_hot_encode()
+#sample_model.run_model()
 
 sample_shop_id = 55
 sample_item_id = 492
@@ -245,7 +245,7 @@ app.layout = html.Div([
 def update_dropdown_option(shop_id_from_dropdown):
     sample_model.get_valid_item_list(shop_id_from_dropdown)
     sample_model.convert_list_to_options_dict_items()
-    return sample_model.list_of_dicts_shops
+    return sample_model.list_of_dicts_items
 
 
 # Connect the Plotly graphs with Dash drop down Components
