@@ -3,10 +3,20 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from xgboost import plot_importance
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import train_test_split
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
+
+from scipy import stats
+
 
 def plot_features(booster, figsize):
     fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -29,18 +39,21 @@ train = pd.read_csv('sales_train.csv')
 # test = pd.read_csv('test.csv').set_index('ID')
 # submission = pd.read_csv('sample_submission.csv')
 items = pd.read_csv('items.csv')
-# item_cats = pd.read_csv('item_categories.csv')
+item_cats = pd.read_csv('item_categories.csv')
 # shops = pd.read_csv('shops.csv')
 items_t = pd.read_csv('items_translated_text.csv')
+train_lag = pd.read_csv('month_lag_grouped.csv')
 
 # Calls the downcasting function
 train = downcast_dtypes(train)
 # test = downcast_dtypes(test)
 # submission = downcast_dtypes(submission)
 items = downcast_dtypes(items)
+train_lag = downcast_dtypes(train_lag)
+
+item_cats = downcast_dtypes(item_cats)
 
 
-# item_cats = downcast_dtypes(item_cats)
 # shops = downcast_dtypes(shops)
 
 # train = train.merge(items, on='item_id')
@@ -57,6 +70,10 @@ def create_clean_df(train):
     train = train[train.item_price < 90000]
     train = train[train.item_cnt_day < 999]
 
+    median = train[(train.shop_id == 32) & (train.item_id == 2973) & (train.date_block_num == 4) & (
+            train.item_price > 0)].item_price.median()
+    train.loc[train.item_price < 0, 'item_price'] = median
+
     train_cnt = train['item_cnt_day']
     train.drop(labels=['item_cnt_day'], axis=1, inplace=True)
     train.insert(6, 'item_cnt_day', train_cnt)
@@ -65,7 +82,22 @@ def create_clean_df(train):
         train.groupby(['date_block_num', 'shop_id', 'item_category_id', 'item_id', 'item_price'])[
             'item_cnt_day'].sum().reset_index())
     train_grouped_month.rename(columns={'item_cnt_day': 'item_cnt_month'}, inplace=True)
+
+    train_grouped_month['item_cnt_month'] = (train_grouped_month['item_cnt_month']
+                                             .fillna(0)
+                                             .clip(0, 20)  # NB clip target here
+                                             .astype(np.float16))
     return train_grouped_month
+
+
+def one_hot_encode(train_df):
+    # Changes numerical, categorical features into strings to properly be represented as categorical in onehotencoding
+    # nominal intergers can not be converted to binary encoding, convert to string
+    train_df['date_block_num'] = [('month ' + str(i)) for i in train_df['date_block_num']]
+    train_df['shop_id'] = [('shop ' + str(i)) for i in train_df['shop_id']]
+    train_df['item_category_id'] = [('item_category ' + str(i)) for i in train_df['item_category_id']]
+    train_df['item_id'] = [('item ' + str(i)) for i in train_df['item_id']]
+    return train_df
 
 
 def create_one_shop_one_item_df(itemid, shopid, train_grouped_month):
@@ -100,8 +132,45 @@ def convert_list_to_options_dict(valid_items):
     return list_of_dicts
 
 
+def run_model(train_df):
+    x = train_df.iloc[:, :-1].values
+    y = train_df.iloc[:, -1].values
+    ct = ColumnTransformer([('encoder', OneHotEncoder(), [0, 1, 2, 3])], remainder='passthrough')
+    x = ct.fit_transform(x)
+    X_train, X_test, Y_train, Y_test = train_test_split(x, y, test_size=0.2, random_state=0)
+    regressor = LinearRegression()
+    regressor.fit(X_train, Y_train)
+
+    return regressor, ct
+
+
+def get_z_list(shop_id_num, item_id_num):
+    # item_cat = items.loc[items['item_id'] == item_id_num, ['item_category_id']].values[0][0]
+    item_cat = items[items['item_id'] == item_id_num]['item_category_id'].values
+    prices = train.loc[train['item_id'] == item_id_num, ['item_price']].values
+    price = (stats.mode(prices))[0][0][0]
+    z = ['month 34', 'shop ' + str(shop_id_num), 'item_category ' + str(item_cat), 'item ' + str(item_id_num), price]
+    return z
+
+
+def predict_month_34(shop_id_num, item_id_num):
+    #global ct
+    #z = get_z_list(shop_id_num, item_id_num)
+
+    regressor, ct = run_model(train_grouped_month_str)
+
+    z = ['month 33', 'shop 55', 'item_category 76', 'item 492', 600.0]
+    z = np.array(z, dtype=object).reshape(1, -1)
+    z = ct.transform(z)
+    z_pred = regressor.predict(z)
+
+    return round(z_pred[0], 3)
+
+
 # cleans data
 train_grouped_month = create_clean_df(train)
+train_grouped_month_str = one_hot_encode(train_grouped_month)
+#regressor = run_model(train_grouped_month_str)
 
 sample_shop_id = 55
 sample_item_id = 492
@@ -134,6 +203,8 @@ styles = {
 app.layout = html.Div([
 
     html.H1("Sales Forecasting", style={'text-align': 'center'}),
+    html.H2("Enter Shop ID and Item ID to see next months predicted sales count for that item.",
+            style={'text-align': 'center'}),
 
     # contains the graph
     html.Div([
@@ -141,6 +212,11 @@ app.layout = html.Div([
             id='3d-scatter',
             figure={})]),
     html.Br(),
+
+    html.H2([
+        'Predicted Sales for Next Month: ',
+        html.H2(
+            id='prediction_count')], style={'text-align': 'center'}),
 
     # contains the shop id drop down menu
     html.Div(['Shop ID: ',
@@ -168,8 +244,11 @@ app.layout = html.Div([
 
     # contains the submit button
     html.Div(html.Button(id='submit-button-state', n_clicks=0, children='Show Sales Graph')),
-
     html.Br(),
+
+    html.Div(html.Button(id='predict-button-state', n_clicks=0, children='Predict Next Month')),
+    html.Br(),
+
 ])
 
 
@@ -195,6 +274,16 @@ def update_graph(n_clicks, input_shop_id, input_item_id):
     update_df = create_one_shop_one_item_df(input_item_id, input_shop_id, train_grouped_month)
     # update_df = create_one_shop_df(input_shop_id, train_grouped_month)
     return create_3d_scatter_fig(update_df), 'Item Name: '.join(get_translated_name(input_item_id))
+
+
+@app.callback(
+    Output(component_id='prediction_count', component_property='children'),
+    [Input('predict-button-state', 'n_clicks')],
+    [State("shop-dropdown", "value"),
+     State("item-dropdown", "value")]
+)
+def predict(n_clicks, input_shop_id, input_item_id):
+    return predict_month_34(input_shop_id, input_item_id)
 
 
 # runs the whole thing
