@@ -125,7 +125,7 @@ class PredictionModel:
         self.one_shop_df = self.train_grouped_month[self.train_grouped_month['shop_id'] == shopid]
 
     def create_3d_scatter_fig(self):
-        self.fig = px.scatter_3d(self.one_shop_df, x='date_block_num', y='item_price', z='item_cnt_month', color='item_price')
+        self.fig = px.scatter_3d(self.one_shop_one_item_df, x='date_block_num', y='item_price', z='item_cnt_month', color='item_price')
 
     def get_translated_name(self, itemid):
         self.t_name = self.items_t[self.items_t['item_id'] == itemid]['english_name']
@@ -147,12 +147,13 @@ class PredictionModel:
     def convert_list_to_options_dict_shops(self):
         self.list_of_dicts_shops = []
 
-        for item in self.valid_items:
+        for item in self.valid_shops:
             temp_dict = {'label': item, 'value': item}
             self.list_of_dicts_shops.append(temp_dict)
 
 
 sample_model = PredictionModel()
+
 sample_model.train
 sample_model.one_hot_encode()
 sample_model.run_model()
@@ -161,6 +162,7 @@ sample_shop_id = 55
 sample_item_id = 492
 
 sample_model.create_one_shop_df(sample_shop_id)
+sample_model.create_one_shop_one_item_df(sample_shop_id, sample_item_id)
 sample_model.create_3d_scatter_fig()
 
 # gets the list of items that are sold in a particular shop to put into the drop down menu
