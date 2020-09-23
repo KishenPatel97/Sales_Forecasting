@@ -29,6 +29,7 @@ class PredictionModel:
         self.import_data()
         self.down_cast()
         self.clean_df()
+        self.clean_lag()
 
     def downcast_dtypes(self, df):
         float_cols = [c for c in df if df[c].dtype == "float64"]
@@ -43,12 +44,43 @@ class PredictionModel:
         self.item_cats = pd.read_csv('item_categories.csv')
         self.items_t = pd.read_csv('items_translated_text.csv')
         self.train_lag = pd.read_csv('month_lag_grouped.csv')
+        self.train_lag_new = pd.read_csv('new_month_group.csv')
 
     def down_cast(self):
         self.train = self.downcast_dtypes(self.train)
         self.items = self.downcast_dtypes(self.items)
         self.train_lag = self.downcast_dtypes(self.train_lag)
         self.item_cats = self.downcast_dtypes(self.item_cats)
+        self.train_lag_new = self.downcast_dtypes(self.train_lag_new)
+
+    def clean_lag(self):
+        self.train_lag_new = self.train_lag_new.dropna()
+        #self.train_lag_new.drop(labels=['date_block_num'], axis=1, inplace=True)
+
+        self.train_lag_new = self.train_lag_new[self.train_lag_new.item_price < 90000]
+        self.train_lag_new = self.train_lag_new[self.train_lag_new.item_cnt_day < 999]
+
+        # replaces the negative price item with the median item_price of all items with the id of 2973 and in shop id 32
+        median = self.train_lag_new[(self.train_lag_new.shop_id == 32) & (self.train_lag_new.item_id == 2973) & (self.train_lag_new.date_block_num == 4) & (
+                        self.train_lag_new.item_price > 0)].item_price.median()
+        self.train_lag_new.loc[self.train_lag_new.item_price < 0, 'item_price'] = median
+
+    def one_hot_encode_lag(self):
+        self.train_lag_new['date_block_num'] = [('month ' + str(i)) for i in self.train_lag_new['date_block_num']]
+        self.train_lag_new['shop_id'] = [('shop ' + str(i)) for i in self.train_lag_new['shop_id']]
+        self.train_lag_new['item_category_id'] = [('item_category ' + str(i)) for i in
+                                                  self.train_lag_new['item_category_id']]
+        self.train_lag_new['item_id'] = [('item ' + str(i)) for i in self.train_lag_new['item_id']]
+
+    def run_lag_model(self):
+        self.x_lag = self.train_lag_new.iloc[:, :-1].values
+        self.y_lag = self.train_lag_new.iloc[:, -1].values
+        self.ct_lag = ColumnTransformer([('encoder', OneHotEncoder(), [0, 1, 2, 3, 4])], remainder='passthrough')
+        self.x_lag = self.ct_lag.fit_transform(self.x_lag)
+        self.X_train_lag, self.X_test_lag, self.Y_train_lag, self.Y_test_lag \
+            = train_test_split(self.x_lag, self.y_lag, test_size=0.2,random_state=0)
+        self.regressor_lag = LinearRegression()
+        self.regressor_lag.fit(self.X_train_lag, self.Y_train_lag)
 
     def clean_df(self):
         self.train = self.train.merge(self.items, on='item_id')
@@ -107,6 +139,53 @@ class PredictionModel:
         return ['month ' + str(month), 'shop ' + str(shop_id_num), 'item_category ' + str(self.item_cat),
                 'item ' + str(item_id_num), self.price]
 
+    def get_z_list_lag(self, shop_id_num, item_id_num):
+        # item_cat = items.loc[items['item_id'] == item_id_num, ['item_category_id']].values[0][0]
+        self.item_cat = self.items[self.items['item_id'] == item_id_num]['item_category_id'].values
+        self.prices = self.train.loc[self.train['item_id'] == item_id_num, ['item_price']].values
+        self.price = (stats.mode(self.prices))[0][0][0]
+        self.date_num = 34
+        new_pd = self.train_lag_new.loc[self.train_lag_new['date_block_num'] == self.date_num - 1].loc[
+            self.train_lag_new['shop_id'] == shop_id_num].loc[self.train_lag_new['item_id'] == item_id_num]
+        new_pd2 = self.train_lag_new.loc[self.train_lag_new['date_block_num'] == date_num - 2].loc[
+            self.train_lag_new['shop_id'] == shop_id_num].loc[self.train_lag_new['item_id'] == item_id_num]
+        new_pd3 = self.train_lag_new.loc[self.train_lag_new['date_block_num'] == date_num - 3].loc[
+            self.train_lag_new['shop_id'] == shop_id_num].loc[self.train_lag_new['item_id'] == item_id_num]
+        new_pd4 = self.train_lag_new.loc[self.train_lag_new['date_block_num'] == date_num - 4].loc[
+            self.train_lag_new['shop_id'] == shop_id_num].loc[self.train_lag_new['item_id'] == item_id_num]
+        new_pd5 = self.train_lag_new.loc[self.train_lag_new['date_block_num'] == date_num - 5].loc[
+            self.train_lag_new['shop_id'] == shop_id_num].loc[self.train_lag_new['item_id'] == item_id_num]
+        # print(len(new_pd['date_block_num']))
+        if len(new_pd['shop_id']) > 0:
+            mon1 = self.train_lag_new['item_cnt_day'][new_pd.index[0]]
+        else:
+            mon1 = 0
+
+        if len(new_pd2['shop_id']) > 0:
+            mon2 = self.train_lag_new['item_cnt_day'][new_pd2.index[0]]
+        else:
+            mon2 = 0
+
+        if len(new_pd3['shop_id']) > 0:
+            mon3 = self.train_lag_new['item_cnt_day'][new_pd3.index[0]]
+        else:
+            mon3 = 0
+
+        if len(new_pd4['shop_id']) > 0:
+            mon4 = self.train_lag_new['item_cnt_day'][new_pd4.index[0]]
+        else:
+            mon4 = 0
+
+        if len(new_pd5['shop_id']) > 0:
+            mon5 = self.train_lag_new['item_cnt_day'][new_pd5.index[0]]
+        else:
+            mon5 = 0
+
+        self.z_lag = ['november', 'shop ' + str(shop_id_num), 'item_category ' + str(self.item_cat), 'item ' + str(item_id_num),
+             self.price, mon1, mon2, mon3, mon4, mon5]
+
+
+
     def predict_month(self, shop_id_num, item_id_num, month):
         z = self.get_z_list(shop_id_num, item_id_num, month)
 
@@ -155,7 +234,12 @@ class PredictionModel:
 
 sample_model = PredictionModel()
 
-sample_model.train
+sample_model.one_hot_encode_lag()
+sample_model.run_lag_model()
+
+
+print(sample_model.train.head(5))
+
 #sample_model.one_hot_encode()
 #sample_model.run_model()
 
@@ -264,15 +348,15 @@ def update_graph(n_clicks, input_shop_id, input_item_id):
     return sample_model.fig, 'Item Name: '.join(sample_model.t_name)
 
 
-#@app.callback(
-#    Output(component_id='prediction_count', component_property='children'),
-#    [Input('predict-button-state', 'n_clicks')],
-#    [State("shop-dropdown", "value"),
-#     State("item-dropdown", "value")]
-#)
-#def predict(n_clicks, input_shop_id, input_item_id):
-
-#    return sample_model.predict_month(input_shop_id, input_item_id, 33)
+@app.callback(
+    Output(component_id='prediction_count', component_property='children'),
+    [Input('predict-button-state', 'n_clicks')],
+    [State("shop-dropdown", "value"),
+     State("item-dropdown", "value")]
+)
+def predict(n_clicks, input_shop_id, input_item_id):
+    sample_model.get_z_list_lag(input_shop_id, input_item_id)
+    return sample_model.z_lag
 
 
 # runs the whole thing
